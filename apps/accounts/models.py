@@ -27,6 +27,15 @@ class User(AbstractUser):
         blank=True,
         help_text="Hospital, clinic or dialysis center the user works at.",
     )
+    # Required in practice for dialysis nurses (app-enforced): scopes the
+    # nurse portal to their center's patients.
+    dialysis_center = models.ForeignKey(
+        "patients.DialysisCenter",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="staff",
+    )
 
     class Meta:
         ordering = ["last_name", "first_name", "username"]

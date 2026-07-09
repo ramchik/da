@@ -18,11 +18,15 @@ pseudonymous `registry_code`, e.g. `DA-000042`, for future anonymized exports).
 
 | App | Models | Purpose |
 | --- | --- | --- |
-| `accounts` | `User` | Custom user with clinical `role` (vascular surgeon, nephrologist, dialysis nurse, registry coordinator, researcher). |
-| `patients` | `Patient`, `PatientStatusEvent`, `ClinicalNote` | Demographics, CKD stage and renal history, comorbidities; append-only pathway status history (predialysis → HD → transplant/transfer/death/LTFU) with a denormalized `current_status`; free-text clinical commentary. |
-| `vascular_access` | `VesselMapping`, `AccessPlan`, `VascularAccess`, `AccessProcedure`, `AccessComplication` | Preoperative duplex mapping; documented access strategy; one row per access (all nine access types) with pathway milestone dates; every operation (index creation + all revisions); every adverse event. |
-| `dialysis` | `DialysisSessionLog` | Nurse-entered per-session functionality records (cannulation success, Qb, pressures, problems). |
-| `audit` | `AuditLog` | Append-only, actor-attributed create/update/delete trail with per-field diffs, written automatically for all clinical models. |
+| `core` | `RegistrySetting` (+ abstract `TimeStampedModel`, `VoidableModel`) | Superuser-editable clinical thresholds; shared timestamp and void-instead-of-delete mixins. |
+| `accounts` | `User` | Custom user with clinical `role` (vascular surgeon, nephrologist, dialysis nurse, registry coordinator, researcher); nurses carry a dialysis-center scope. |
+| `patients` | `DialysisCenter`, `Patient`, `PatientStatusEvent`, `ClinicalNote` | Collaborating centers; demographics, CKD stage and renal history, comorbidities; append-only pathway status history (predialysis → HD → transplant/transfer/death/LTFU) with a denormalized `current_status`; free-text clinical commentary. |
+| `vascular_access` | `VesselMapping`, `AccessPlan`, `VascularAccess`, `CatheterDetail`, `MaturationAssessment`, `AccessProcedure`, `Device`, `ProcedureDevice`, `AccessComplication`, `InfectionDetail`, `ThrombosisDysfunctionDetail` | Preoperative duplex mapping; access life-plan; one row per access (all nine access types) with pathway milestone dates; catheter-specific detail; structured maturation follow-up; every operation (index creation + all revisions) with device traceability; every adverse event with infection/thrombosis detail extensions. |
+| `dialysis` | `DialysisSessionLog` | Nurse-entered per-session functionality records (cannulation success, Qb, pressures, problems), scoped to a dialysis center. |
+| `followup` | `FollowUpTask` | Worklist engine: system- and manually-created tasks with due dates, deferral rules and dedupe keys. |
+| `alerts` | `Alert` | Persisted instances of spec alert rules A1–A15 with severity, snooze and note-required resolution. |
+| `research` | `ExportLog` | Trail of every anonymized export (who, what, when, filters). |
+| `audit` | `AuditLog` | Append-only, actor- and IP-attributed create/update/delete trail with per-field diffs, written automatically for all clinical models. |
 
 ### Access types
 

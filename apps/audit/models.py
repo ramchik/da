@@ -31,6 +31,7 @@ class AuditLog(models.Model):
         encoder=DjangoJSONEncoder,
         help_text='Per-field diff: {"field": [old, new], …}',
     )
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
 
     class Meta:
         ordering = ["-timestamp"]

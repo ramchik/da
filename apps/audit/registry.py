@@ -7,11 +7,12 @@ acting user (taken from ``AuditActorMiddleware``'s thread-local).
 
 from django.db.models.signals import post_delete, post_save, pre_save
 
-from .middleware import get_current_actor
+from .middleware import get_current_actor, get_current_ip
 from .models import AuditAction, AuditLog
 
-# Bookkeeping fields whose changes carry no clinical meaning.
-EXCLUDED_FIELDS = {"created_at", "updated_at", "password", "last_login"}
+# Bookkeeping fields whose changes carry no clinical meaning
+# (last_evaluated_at is the alert engine's heartbeat — pure churn).
+EXCLUDED_FIELDS = {"created_at", "updated_at", "password", "last_login", "last_evaluated_at"}
 
 
 def _snapshot(instance):
@@ -42,6 +43,7 @@ def _write(instance, action, changes):
         object_pk=str(instance.pk),
         object_repr=str(instance)[:255],
         changes=changes,
+        ip_address=get_current_ip(),
     )
 
 

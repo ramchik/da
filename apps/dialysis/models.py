@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.db import models
 
-from apps.core.models import TimeStampedModel
+from apps.core.models import TimeStampedModel, VoidableModel
+from apps.patients.models import DialysisCenter
 from apps.vascular_access.models import VascularAccess
 
 
@@ -20,7 +21,7 @@ class SessionProblem(models.TextChoices):
     OTHER = "other", "Other"
 
 
-class DialysisSessionLog(TimeStampedModel):
+class DialysisSessionLog(VoidableModel, TimeStampedModel):
     """Per-session functionality record entered by the dialysis nurse.
 
     This is deliberately lightweight — one row per session (or per
@@ -32,9 +33,18 @@ class DialysisSessionLog(TimeStampedModel):
         VascularAccess, on_delete=models.CASCADE, related_name="dialysis_logs"
     )
     session_date = models.DateField()
+    dialysis_center = models.ForeignKey(
+        DialysisCenter,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="session_logs",
+        help_text="Where the session happened; defaults to the patient's center.",
+    )
     cannulation_successful = models.BooleanField(
         null=True, blank=True, help_text="For fistula/graft sessions; leave empty for catheters."
     )
+    needle_gauge = models.PositiveSmallIntegerField(null=True, blank=True)
     blood_flow_rate_ml_min = models.PositiveSmallIntegerField(
         null=True, blank=True, help_text="Achieved pump speed (Qb), mL/min."
     )
@@ -53,6 +63,15 @@ class DialysisSessionLog(TimeStampedModel):
     class Meta:
         ordering = ["-session_date", "-id"]
         verbose_name = "dialysis session log"
+        indexes = [
+            models.Index(fields=["access", "-session_date"], name="session_access_date_idx"),
+            # A7 alert scans only problem sessions.
+            models.Index(
+                fields=["problem"],
+                name="session_problem_idx",
+                condition=~models.Q(problem="none"),
+            ),
+        ]
 
     def __str__(self):
         return f"Session {self.session_date} on {self.access}"

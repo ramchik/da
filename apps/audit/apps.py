@@ -4,15 +4,23 @@ from django.apps import AppConfig, apps
 # is last in INSTALLED_APPS so all of these are loaded by the time
 # ready() runs.
 AUDITED_MODELS = [
+    "patients.DialysisCenter",
     "patients.Patient",
     "patients.PatientStatusEvent",
     "patients.ClinicalNote",
     "vascular_access.VesselMapping",
     "vascular_access.AccessPlan",
     "vascular_access.VascularAccess",
+    "vascular_access.CatheterDetail",
+    "vascular_access.MaturationAssessment",
     "vascular_access.AccessProcedure",
+    "vascular_access.ProcedureDevice",
     "vascular_access.AccessComplication",
+    "vascular_access.InfectionDetail",
+    "vascular_access.ThrombosisDysfunctionDetail",
     "dialysis.DialysisSessionLog",
+    "followup.FollowUpTask",
+    "alerts.Alert",
 ]
 
 

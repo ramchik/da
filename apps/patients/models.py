@@ -1,8 +1,10 @@
+import datetime
+
 from django.conf import settings
 from django.core.validators import RegexValidator
 from django.db import models, transaction
 
-from apps.core.models import TimeStampedModel
+from apps.core.models import TimeStampedModel, VoidableModel
 
 
 class Sex(models.TextChoices):
@@ -40,6 +42,25 @@ class PatientStatus(models.TextChoices):
     DECEASED = "deceased", "Deceased"
 
 
+class DialysisCenter(TimeStampedModel):
+    """Collaborating dialysis center; scopes nurse accounts and session logs."""
+
+    name = models.CharField(max_length=255, unique=True)
+    city = models.CharField(max_length=100, blank=True)
+    region = models.CharField(max_length=100, blank=True)
+    address = models.CharField(max_length=255, blank=True)
+    phone = models.CharField(max_length=32, blank=True)
+    contact_person = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Patient(TimeStampedModel):
     """One row per person followed by the access service.
 
@@ -67,8 +88,13 @@ class Patient(TimeStampedModel):
     phone = models.CharField(max_length=32, blank=True)
     region = models.CharField(max_length=100, blank=True, help_text="Region / city of residence.")
     address = models.CharField(max_length=255, blank=True)
-    dialysis_center = models.CharField(
-        max_length=255, blank=True, help_text="Dialysis center the patient attends, if on HD."
+    dialysis_center = models.ForeignKey(
+        DialysisCenter,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="patients",
+        help_text="Dialysis center the patient attends, if on HD.",
     )
 
     # Referral into the access pathway
@@ -118,13 +144,31 @@ class Patient(TimeStampedModel):
     )
     current_status_date = models.DateField(null=True, blank=True)
 
+    merged_into = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="merged_duplicates",
+        help_text="Set when this row was a duplicate registration; follow the pointer.",
+    )
+
     class Meta:
         ordering = ["last_name", "first_name"]
+        indexes = [
+            models.Index(fields=["last_name", "first_name"], name="patient_name_idx"),
+            models.Index(fields=["current_status"], name="patient_status_idx"),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["national_id"],
                 condition=~models.Q(national_id=""),
                 name="unique_national_id_when_present",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(merged_into__isnull=True)
+                | ~models.Q(merged_into=models.F("id")),
+                name="patient_not_merged_into_self",
             ),
         ]
 
@@ -144,9 +188,32 @@ class Patient(TimeStampedModel):
     def full_name(self):
         return f"{self.last_name} {self.first_name}"
 
+    @property
+    def age(self):
+        """Current age in completed years."""
+        today = datetime.date.today()
+        born = self.date_of_birth
+        return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+    @property
+    def active_accesses(self):
+        """Accesses currently on the pathway: maturing, ready or in use."""
+        from apps.vascular_access.models import ACTIVE_ACCESS_STATUSES
+
+        return self.accesses.filter(status__in=ACTIVE_ACCESS_STATUSES, is_voided=False)
+
+    @property
+    def has_overdue_follow_up(self):
+        """True if any open follow-up task on this patient is past due."""
+        return self.follow_up_tasks.filter(
+            status="open", due_date__lt=datetime.date.today()
+        ).exists()
+
     def refresh_current_status(self):
-        """Re-derive the denormalized status from the event history."""
-        latest = self.status_events.order_by("-event_date", "-id").first()
+        """Re-derive the denormalized status from the (non-voided) event history."""
+        latest = (
+            self.status_events.filter(is_voided=False).order_by("-event_date", "-id").first()
+        )
         if latest is None:
             return
         if (
@@ -158,7 +225,7 @@ class Patient(TimeStampedModel):
             self.save(update_fields=["current_status", "current_status_date", "updated_at"])
 
 
-class PatientStatusEvent(TimeStampedModel):
+class PatientStatusEvent(VoidableModel, TimeStampedModel):
     """History of pathway transitions: predialysis → HD → transplant/death/…
 
     Statuses can recur (e.g. failed transplant returning to hemodialysis),
@@ -180,6 +247,9 @@ class PatientStatusEvent(TimeStampedModel):
 
     class Meta:
         ordering = ["-event_date", "-id"]
+        indexes = [
+            models.Index(fields=["patient", "-event_date"], name="statusevent_patient_date_idx"),
+        ]
 
     def __str__(self):
         return f"{self.patient.registry_code}: {self.get_status_display()} on {self.event_date}"
@@ -194,7 +264,7 @@ class PatientStatusEvent(TimeStampedModel):
         patient.refresh_current_status()
 
 
-class ClinicalNote(TimeStampedModel):
+class ClinicalNote(VoidableModel, TimeStampedModel):
     """Free-text commentary on a patient (e.g. nephrologist remarks)."""
 
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name="clinical_notes")

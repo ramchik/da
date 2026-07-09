@@ -40,6 +40,19 @@ class PatientModelTests(TestCase):
         with self.assertRaises(IntegrityError), transaction.atomic():
             make_patient(first_name="Nino", national_id="01001012345")
 
+    def test_age_in_completed_years(self):
+        today = datetime.date.today()
+        # Birthday tomorrow: the current year does not count yet.
+        not_yet = make_patient(
+            date_of_birth=today.replace(year=today.year - 60) + datetime.timedelta(days=1)
+        )
+        self.assertEqual(not_yet.age, 59)
+        # Birthday today: counts.
+        exactly = make_patient(
+            first_name="Nino", date_of_birth=today.replace(year=today.year - 60)
+        )
+        self.assertEqual(exactly.age, 60)
+
 
 class PatientStatusEventTests(TestCase):
     def test_latest_event_drives_current_status(self):
@@ -61,6 +74,24 @@ class PatientStatusEventTests(TestCase):
             status=PatientStatus.PREDIALYSIS,
             event_date=datetime.date(2025, 11, 1),
         )
+        patient.refresh_from_db()
+        self.assertEqual(patient.current_status, PatientStatus.ON_HEMODIALYSIS)
+
+    def test_voided_event_is_ignored(self):
+        patient = make_patient()
+        PatientStatusEvent.objects.create(
+            patient=patient,
+            status=PatientStatus.ON_HEMODIALYSIS,
+            event_date=datetime.date(2026, 1, 10),
+        )
+        death = PatientStatusEvent.objects.create(
+            patient=patient,
+            status=PatientStatus.DECEASED,
+            event_date=datetime.date(2026, 3, 1),
+        )
+        death.is_voided = True
+        death.void_reason = "Entered on the wrong patient"
+        death.save()
         patient.refresh_from_db()
         self.assertEqual(patient.current_status, PatientStatus.ON_HEMODIALYSIS)
 

@@ -31,12 +31,15 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    # Registry apps
+    # Registry apps ("audit" stays last: it wires signals for the others)
     "apps.core",
     "apps.accounts",
     "apps.patients",
     "apps.vascular_access",
     "apps.dialysis",
+    "apps.followup",
+    "apps.alerts",
+    "apps.research",
     "apps.audit",
 ]
 

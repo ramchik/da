@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import ClinicalNote, Patient, PatientStatusEvent
+from .models import ClinicalNote, DialysisCenter, Patient, PatientStatusEvent
+
+
+@admin.register(DialysisCenter)
+class DialysisCenterAdmin(admin.ModelAdmin):
+    list_display = ("name", "city", "region", "phone", "contact_person", "is_active")
+    list_filter = ("is_active", "region")
+    search_fields = ("name", "city")
 
 
 class PatientStatusEventInline(admin.TabularInline):
@@ -28,9 +35,10 @@ class PatientAdmin(admin.ModelAdmin):
         "current_status",
         "dialysis_center",
     )
-    list_filter = ("current_status", "ckd_stage_at_referral", "primary_renal_disease", "sex")
+    list_filter = ("current_status", "ckd_stage_at_referral", "primary_renal_disease", "sex",
+                   "dialysis_center")
     search_fields = ("registry_code", "last_name", "first_name", "national_id", "phone")
-    readonly_fields = ("registry_code", "current_status", "current_status_date")
+    readonly_fields = ("registry_code", "current_status", "current_status_date", "merged_into")
     date_hierarchy = "referral_date"
     inlines = [PatientStatusEventInline, ClinicalNoteInline]
     fieldsets = (
